@@ -1,0 +1,12 @@
+flask>=3.0
+requests>=2.31
+python-dotenv>=1.0
+
+# Needed once you wire up the logistic-regression model (Phase 4 in the
+# design doc) -- not required for the current Elo + Monte Carlo demo.
+numpy>=1.26
+scikit-learn>=1.4
+pandas>=2.2
+
+# Needed once you connect backend/db/schema.sql to a real Postgres instance.
+psycopg2-binary>=2.9
