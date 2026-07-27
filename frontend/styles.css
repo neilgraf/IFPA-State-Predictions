@@ -1,20 +1,324 @@
+:root {
+    --ink: #1f2430;
+    --ink-soft: #5c6577;
+    --line: #dde1e9;
+    --bg: #f4f4f4;
+    --panel: #ffffff;
+    --accent: #2d6cdf;
+    --accent-dark: #1e51ad;
+    --danger: #b3352c;
+    --ok: #1d7a4c;
+}
+
+* {
+    box-sizing: border-box;
+}
+
 body {
-    font-family: Arial, sans-serif;
+    font-family: -apple-system, "Segoe UI", Arial, sans-serif;
     margin: 0;
     padding: 0;
-    background-color: #f4f4f4;
+    background-color: var(--bg);
+    color: var(--ink);
+    line-height: 1.5;
 }
 
 header {
     background-color: #333;
     color: white;
     text-align: center;
-    padding: 1rem;
+    padding: 1.5rem 1rem;
 }
 
-#prediction-chart {
-    width: 80%;
-    margin: 20px auto;
+header h1 {
+    margin: 0 0 0.25rem;
+    font-size: 1.6rem;
+}
+
+header p {
+    margin: 0;
+    color: #c8cdd8;
+    font-size: 0.95rem;
+}
+
+main {
+    max-width: 1000px;
+    margin: 1.5rem auto 3rem;
+    padding: 0 1rem;
+}
+
+.panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+.panel h2 {
+    margin: 0 0 0.5rem;
+    font-size: 1.1rem;
+}
+
+.panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.panel-head h2 {
+    margin-bottom: 0;
+}
+
+.hint {
+    color: var(--ink-soft);
+    font-size: 0.88rem;
+    margin: 0.35rem 0 0.85rem;
+}
+
+.hint-inline {
+    color: var(--ink-soft);
+    font-weight: normal;
+    font-size: 0.8rem;
+}
+
+code {
+    background: #eef1f6;
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+    font-size: 0.85em;
+}
+
+/* ---------- Field size selector ---------- */
+
+.size-buttons {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.size-buttons button {
+    flex: 1 1 90px;
+    padding: 0.85rem 0.5rem;
+    font-size: 1.05rem;
+    font-weight: 600;
+    background: #fff;
+    border: 2px solid var(--line);
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--ink);
+}
+
+.size-buttons button:hover {
+    border-color: var(--accent);
+}
+
+.size-buttons button[aria-pressed="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+/* ---------- Buttons ---------- */
+
+.button-row {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
+}
+
+.button-row.compact {
+    margin-top: 0;
+}
+
+button {
+    font: inherit;
+    padding: 0.5rem 0.9rem;
+    border-radius: 7px;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink);
+    cursor: pointer;
+}
+
+button:hover {
+    background: #f1f4fa;
+}
+
+button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+}
+
+button.primary:hover {
+    background: var(--accent-dark);
+}
+
+button.primary:disabled {
+    background: #9fb4dc;
+    border-color: #9fb4dc;
+    cursor: progress;
+}
+
+button.large {
+    padding: 0.7rem 1.6rem;
+    font-size: 1.05rem;
+}
+
+button.danger {
+    color: var(--danger);
+    border-color: #e6c6c3;
+}
+
+button.danger:hover {
+    background: #fdf1f0;
+}
+
+/* ---------- Paste box ---------- */
+
+textarea {
+    width: 100%;
+    font-family: ui-monospace, Consolas, "Courier New", monospace;
+    font-size: 0.9rem;
+    padding: 0.7rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    resize: vertical;
+}
+
+.status {
+    font-size: 0.88rem;
+    margin: 0.6rem 0 0;
+    min-height: 1.25rem;
+}
+
+.status.ok {
+    color: var(--ok);
+}
+
+.status.error {
+    color: var(--danger);
+}
+
+/* ---------- Roster grid ---------- */
+
+.roster-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 0.5rem;
+    max-height: 520px;
+    overflow-y: auto;
+    padding-right: 0.25rem;
+}
+
+.roster-row {
+    display: grid;
+    grid-template-columns: 2.2rem 1fr 5.5rem;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.roster-row .seed {
+    text-align: right;
+    color: var(--ink-soft);
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.roster-row input {
+    font: inherit;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    min-width: 0;
+}
+
+.roster-row input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+}
+
+.roster-row input.invalid {
+    border-color: var(--danger);
+    background: #fdf1f0;
+}
+
+/* ---------- Options ---------- */
+
+.options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.options label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.options input,
+.options select {
+    font: inherit;
+    font-weight: normal;
+    padding: 0.45rem 0.5rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+}
+
+/* ---------- Results ---------- */
+
+.chart-wrap {
+    position: relative;
+    margin-top: 0.5rem;
+}
+
+.table-wrap {
+    overflow-x: auto;
+    max-height: 640px;
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.9rem;
+}
+
+th, td {
+    padding: 0.45rem 0.6rem;
+    text-align: right;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+}
+
+th:nth-child(2), td:nth-child(2) {
+    text-align: left;
+}
+
+thead th {
+    position: sticky;
+    top: 0;
+    background: var(--panel);
+    border-bottom: 2px solid var(--line);
+}
+
+tbody tr:hover {
+    background: #f6f8fc;
+}
+
+td.win-col {
+    font-weight: 700;
+}
+
+td.na {
+    color: #b7bcc7;
 }
 
 footer {

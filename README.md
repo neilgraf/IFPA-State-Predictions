@@ -1,34 +1,50 @@
 # IFPA State Predictions
 
 Monte Carlo pinball tournament prediction system: Elo-based bracket
-simulation, a Flask API, and a Chart.js frontend, plus scaffolding for
-pulling in live MatchPlay/IFPA data.
+simulation, a Flask API, and a browser GUI for entering your own field,
+plus scaffolding for pulling in live MatchPlay/IFPA data.
 
 ## What actually works right now (no API keys needed)
 
-The Elo + Monte Carlo simulation, Flask API, and frontend are fully
-functional offline, using the player rosters already in
-`backend/models/players_data.py`.
+Everything below runs offline, no credentials required.
 
 ```bash
 pip install -r requirements.txt
-
-# 1. Run the simulation, writes backend/data/predictions.json
-python generate_predictions.py --simulations 10000
-
-# 2. Start the server
-cd backend
-python server.py
+python backend/server.py
 ```
 
-Then open http://127.0.0.1:5000 — you'll get a win-probability bar chart
-for all 24 players plus a round-by-round advancement table (probability of
-reaching R1/R2/QF/SF/F/Win), generated from real simulation output rather
-than the old hardcoded 3-player array.
+Then open http://127.0.0.1:5000 and use the setup GUI:
 
-Re-run `generate_predictions.py` any time (with `--dataset wi`, `--dataset
-oh`, or `--dataset new_wi`, and optionally `--seed 42` for reproducible
-output) and refresh the page to see updated numbers.
+1. **Pick a field size** — 16, 24, 32, or 64 players, all head-to-head
+   single elimination.
+2. **Paste in the players.** One per line, in seed order. Ratings are
+   optional and can follow the name after a comma, a tab, or a space
+   (`Neil Graf, 1779`). Leading seed numbers (`3.`, `3)`, `#3`) are
+   stripped, so pasting straight from a standings page works. Paste more
+   names than the current field holds and the field grows to the next size
+   up. Blank ratings default to 1500.
+3. **Tweak the options** — match format (single game through best-of-9),
+   simulation count, and an optional RNG seed for repeatable runs.
+4. **Run it.** You get a win-probability bar chart plus a round-by-round
+   advancement table (probability of reaching each round, `—` where a bye
+   means the player never plays that round).
+
+"Load sample roster" fills in one of the rosters from
+`backend/models/players_data.py` if you just want to see it work.
+
+Fields that aren't a power of two are seeded into the next power of two up,
+with the surplus slots played as byes for the top seeds — so a 24-player
+field is a 32-slot bracket where seeds 1-8 sit out round 1, which is the
+IFPA state championship format.
+
+### Command line
+
+`generate_predictions.py` still runs a built-in roster and writes
+`backend/data/predictions.json`, served at `/api/predictions`:
+
+```bash
+python generate_predictions.py --simulations 10000 --dataset new_wi --seed 42
+```
 
 ## What's scaffolded but needs your own credentials
 
@@ -66,35 +82,61 @@ IFPA_State_Predictions/
 │   ├── models/
 │   │   ├── player.py             # Player class (Elo win probability)
 │   │   ├── players_data.py       # WI/OH rosters (from the original state.py)
-│   │   ├── bracket_definitions.py# 24-player bracket topology as data
+│   │   ├── bracket_definitions.py# bracket topology for any field size
 │   │   └── tournament.py         # Monte Carlo simulator w/ per-round tracking
-│   └── server.py                 # Flask app, serves /api/predictions
+│   └── server.py                 # Flask app: GUI + /api/simulate
 ├── frontend/
-│   ├── index.html
-│   ├── app.js                    # fetches /api/predictions (no more hardcoding)
+│   ├── index.html                # roster setup GUI + results view
+│   ├── app.js                    # paste parser, roster editor, chart/table
 │   └── styles.css
-├── state.py                      # original standalone prototype, unchanged
+├── state.py                      # original standalone prototype
 ├── generate_predictions.py       # CLI: run sim, write predictions.json
 ├── requirements.txt
 └── .env.example
 ```
 
+## API
+
+`POST /api/simulate` — run a bracket from a roster. List order is seed
+order.
+
+```json
+{
+  "players": [{"name": "Neil Graf", "rating": 1779}, "Name Only Is Fine"],
+  "simulations": 10000,
+  "best_of": 7,
+  "seed": null
+}
+```
+
+Responds with the field/bracket shape, the round labels in playing order,
+and a `results` list sorted by win probability, each entry carrying `seed`,
+`rating`, `win_probability`, and `round_probabilities` (`null` for a round
+a bye means the player never plays).
+
+`GET /api/config` — field sizes, match formats, limits, and the built-in
+sample rosters the GUI offers.
+
+`GET /api/predictions` — the last roster written by
+`generate_predictions.py`.
+
 ## What changed from the original prototype
 
-- **`state.py` is untouched** — it still runs standalone exactly as before
-  (`python state.py`) if you just want the quick console output.
 - **The simulation engine was pulled into `backend/models/`** and
   generalized to track *every* round a player reaches, not just who wins.
   That's what makes the round-by-round table possible.
-- **The frontend/backend disconnect is fixed.** Previously `server.py`
-  loaded `predictions.json` but `index.html`/`app.js` never actually used
-  it — `app.js` had the chart data hardcoded. Now `app.js` fetches
-  `/api/predictions` at load time, so regenerating the JSON and refreshing
-  the page is enough to see new numbers — no code changes needed.
-- **`predictions.json`'s shape changed**: from a flat list of
-  `{name, win_probability}` for 3 players, to a full 24-player list with
-  `seed`, `rating`, `round_probabilities` (per round, `null` for byes where
-  a round doesn't apply), and `win_probability`.
+- **The bracket is no longer 24-only.** `bracket_definitions.build_bracket(n)`
+  generates standard seeding order for any field from 2 to 64 and places
+  byes automatically; `build_bracket(24)` reproduces the previously
+  hardcoded 24-player structure exactly.
+- **The frontend is a roster GUI, not a static chart.** It used to have the
+  chart data hardcoded in `app.js`. Now you enter (or paste) a field in the
+  browser and `POST /api/simulate` runs it on demand.
+- **`state.py` had unresolved merge conflict markers** (`<<<<<<<` /
+  `=======` / `>>>>>>>`) committed into it, which made it invalid Python.
+  Resolved in favour of the newer side, the one that includes
+  `New_WI_players_24`. It's still the superseded standalone prototype —
+  `backend/models/` is the live code.
 
 ## Suggested next steps
 

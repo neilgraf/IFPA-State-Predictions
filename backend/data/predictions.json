@@ -1,5 +1,338 @@
 [
-    {"name": "Neil Graf", "win_probability": 44.85},
-    {"name": "Nathan Zalewski", "win_probability": 18.94},
-    {"name": "Kassidy Milanowski", "win_probability": 6.63}
+  {
+    "name": "Neil Graf",
+    "seed": 3,
+    "rating": 1779,
+    "round_probabilities": {
+      "R1": null,
+      "R2": 1.0,
+      "QF": 0.7358,
+      "SF": 0.6298,
+      "F": 0.5184,
+      "W": 0.3308
+    },
+    "win_probability": 0.3308
+  },
+  {
+    "name": "Nathan Zalewski",
+    "seed": 1,
+    "rating": 1771,
+    "round_probabilities": {
+      "R1": null,
+      "R2": 1.0,
+      "QF": 0.8194,
+      "SF": 0.5538,
+      "F": 0.3862,
+      "W": 0.245
+    },
+    "win_probability": 0.245
+  },
+  {
+    "name": "David Daluga",
+    "seed": 8,
+    "rating": 1726,
+    "round_probabilities": {
+      "R1": null,
+      "R2": 1.0,
+      "QF": 0.8126,
+      "SF": 0.3496,
+      "F": 0.1946,
+      "W": 0.0946
+    },
+    "win_probability": 0.0946
+  },
+  {
+    "name": "Ryan Spindler",
+    "seed": 13,
+    "rating": 1721,
+    "round_probabilities": {
+      "R1": 1.0,
+      "R2": 0.865,
+      "QF": 0.495,
+      "SF": 0.2894,
+      "F": 0.1264,
+      "W": 0.0548
+    },
+    "win_probability": 0.0548
+  },
+  {
+    "name": "Jordan Semrow",
+    "seed": 19,
+    "rating": 1714,
+    "round_probabilities": {
+      "R1": 1.0,
+      "R2": 0.8118,
+      "QF": 0.2482,
+      "SF": 0.1734,
+      "F": 0.1182,
+      "W": 0.0514
+    },
+    "win_probability": 0.0514
+  },
+  {
+    "name": "Steven Bowden",
+    "seed": 5,
+    "rating": 1698,
+    "round_probabilities": {
+      "R1": null,
+      "R2": 1.0,
+      "QF": 0.5456,
+      "SF": 0.2546,
+      "F": 0.1012,
+      "W": 0.0444
+    },
+    "win_probability": 0.0444
+  },
+  {
+    "name": "Tom Graf",
+    "seed": 4,
+    "rating": 1699,
+    "round_probabilities": {
+      "R1": null,
+      "R2": 1.0,
+      "QF": 0.4762,
+      "SF": 0.2554,
+      "F": 0.0886,
+      "W": 0.0392
+    },
+    "win_probability": 0.0392
+  },
+  {
+    "name": "Erik Thoren",
+    "seed": 2,
+    "rating": 1671,
+    "round_probabilities": {
+      "R1": null,
+      "R2": 1.0,
+      "QF": 0.6978,
+      "SF": 0.3834,
+      "F": 0.113,
+      "W": 0.034
+    },
+    "win_probability": 0.034
+  },
+  {
+    "name": "Mike Weyenberg",
+    "seed": 10,
+    "rating": 1679,
+    "round_probabilities": {
+      "R1": 1.0,
+      "R2": 0.7722,
+      "QF": 0.4926,
+      "SF": 0.282,
+      "F": 0.0918,
+      "W": 0.0314
+    },
+    "win_probability": 0.0314
+  },
+  {
+    "name": "Kassidy Milanowski",
+    "seed": 12,
+    "rating": 1699,
+    "round_probabilities": {
+      "R1": 1.0,
+      "R2": 0.6004,
+      "QF": 0.3024,
+      "SF": 0.1398,
+      "F": 0.0552,
+      "W": 0.0236
+    },
+    "win_probability": 0.0236
+  },
+  {
+    "name": "Matt McCarty",
+    "seed": 6,
+    "rating": 1646,
+    "round_probabilities": {
+      "R1": null,
+      "R2": 1.0,
+      "QF": 0.5024,
+      "SF": 0.0996,
+      "F": 0.0456,
+      "W": 0.0102
+    },
+    "win_probability": 0.0102
+  },
+  {
+    "name": "Danny Bronny",
+    "seed": 7,
+    "rating": 1638,
+    "round_probabilities": {
+      "R1": null,
+      "R2": 1.0,
+      "QF": 0.43,
+      "SF": 0.1992,
+      "F": 0.0476,
+      "W": 0.0098
+    },
+    "win_probability": 0.0098
+  },
+  {
+    "name": "Drew Geigel",
+    "seed": 16,
+    "rating": 1673,
+    "round_probabilities": {
+      "R1": 1.0,
+      "R2": 0.6502,
+      "QF": 0.1374,
+      "SF": 0.0528,
+      "F": 0.0194,
+      "W": 0.0066
+    },
+    "win_probability": 0.0066
+  },
+  {
+    "name": "Ryan Eggers",
+    "seed": 11,
+    "rating": 1647,
+    "round_probabilities": {
+      "R1": 1.0,
+      "R2": 0.5174,
+      "QF": 0.2618,
+      "SF": 0.0504,
+      "F": 0.0226,
+      "W": 0.0064
+    },
+    "win_probability": 0.0064
+  },
+  {
+    "name": "True Garlynd",
+    "seed": 21,
+    "rating": 1666,
+    "round_probabilities": {
+      "R1": 1.0,
+      "R2": 0.3996,
+      "QF": 0.152,
+      "SF": 0.056,
+      "F": 0.017,
+      "W": 0.0062
+    },
+    "win_probability": 0.0062
+  },
+  {
+    "name": "Trae Vance",
+    "seed": 22,
+    "rating": 1643,
+    "round_probabilities": {
+      "R1": 1.0,
+      "R2": 0.4826,
+      "QF": 0.2358,
+      "SF": 0.0416,
+      "F": 0.0174,
+      "W": 0.005
+    },
+    "win_probability": 0.005
+  },
+  {
+    "name": "Timothy Enders",
+    "seed": 18,
+    "rating": 1617,
+    "round_probabilities": {
+      "R1": 1.0,
+      "R2": 0.5624,
+      "QF": 0.1826,
+      "SF": 0.0734,
+      "F": 0.014,
+      "W": 0.0026
+    },
+    "win_probability": 0.0026
+  },
+  {
+    "name": "Eric Strangeway",
+    "seed": 9,
+    "rating": 1628,
+    "round_probabilities": {
+      "R1": 1.0,
+      "R2": 0.7094,
+      "QF": 0.1622,
+      "SF": 0.028,
+      "F": 0.0076,
+      "W": 0.0022
+    },
+    "win_probability": 0.0022
+  },
+  {
+    "name": "Tom Schmidt",
+    "seed": 15,
+    "rating": 1597,
+    "round_probabilities": {
+      "R1": 1.0,
+      "R2": 0.4376,
+      "QF": 0.1196,
+      "SF": 0.0392,
+      "F": 0.0064,
+      "W": 0.0006
+    },
+    "win_probability": 0.0006
+  },
+  {
+    "name": "Tom Menge",
+    "seed": 17,
+    "rating": 1626,
+    "round_probabilities": {
+      "R1": 1.0,
+      "R2": 0.3498,
+      "QF": 0.0432,
+      "SF": 0.013,
+      "F": 0.0034,
+      "W": 0.0004
+    },
+    "win_probability": 0.0004
+  },
+  {
+    "name": "Buck Bauer",
+    "seed": 23,
+    "rating": 1584,
+    "round_probabilities": {
+      "R1": 1.0,
+      "R2": 0.2278,
+      "QF": 0.0774,
+      "SF": 0.0228,
+      "F": 0.0028,
+      "W": 0.0004
+    },
+    "win_probability": 0.0004
+  },
+  {
+    "name": "Mike Carlson",
+    "seed": 14,
+    "rating": 1603,
+    "round_probabilities": {
+      "R1": 1.0,
+      "R2": 0.1882,
+      "QF": 0.016,
+      "SF": 0.0052,
+      "F": 0.0022,
+      "W": 0.0002
+    },
+    "win_probability": 0.0002
+  },
+  {
+    "name": "Joe DeCleene",
+    "seed": 20,
+    "rating": 1580,
+    "round_probabilities": {
+      "R1": 1.0,
+      "R2": 0.135,
+      "QF": 0.0288,
+      "SF": 0.0048,
+      "F": 0.0004,
+      "W": 0.0002
+    },
+    "win_probability": 0.0002
+  },
+  {
+    "name": "Jordan Cappaert",
+    "seed": 24,
+    "rating": 1557,
+    "round_probabilities": {
+      "R1": 1.0,
+      "R2": 0.2906,
+      "QF": 0.0252,
+      "SF": 0.0028,
+      "F": 0.0001,
+      "W": 0.0001
+    },
+    "win_probability": 0.0001
+  }
 ]

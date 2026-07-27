@@ -12,7 +12,7 @@ import argparse
 import json
 import os
 
-from backend.models.bracket_definitions import ROUND1_MATCHUPS_24, ROUND2_TEMPLATE_24
+from backend.models.bracket_definitions import build_bracket
 from backend.models.players_data import DATASETS
 from backend.models.tournament import BracketTournament
 
@@ -32,7 +32,7 @@ def main():
     args = parser.parse_args()
 
     players = {p.seed: p for p in DATASETS[args.dataset]}
-    tournament = BracketTournament(players, ROUND1_MATCHUPS_24, ROUND2_TEMPLATE_24)
+    tournament = BracketTournament(players, build_bracket(len(players)))
     results = tournament.run(num_simulations=args.simulations, seed=args.seed)
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)

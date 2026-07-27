@@ -3,20 +3,106 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IFPA Wisconsin State Predictions</title>
+    <title>IFPA Bracket Predictions</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <header>
-        <h1>IFPA Wisconsin State Predictions</h1>
-        <p>Bar Chart of the Probabilities of Winning the Wisconsin State Pinball Championship</p>
+        <h1>IFPA Bracket Predictions</h1>
+        <p>Monte Carlo win probabilities for a head-to-head single-elimination bracket</p>
     </header>
 
-    <section id="prediction-chart">
-        <h2>Predictions for NACS</h2>
-        <canvas id="predictionChart"></canvas>
-    </section>
+    <main>
+        <!-- ---------- Setup view ---------- -->
+        <section id="setup-view">
+            <div class="panel">
+                <h2>1. How many players?</h2>
+                <div id="size-buttons" class="size-buttons"></div>
+                <p id="bracket-summary" class="hint"></p>
+            </div>
+
+            <div class="panel">
+                <h2>2. Add the players</h2>
+                <p class="hint">
+                    Paste one player per line, in seed order. Ratings are optional &mdash; add one
+                    after the name using a comma, a tab, or just a space
+                    (<code>Neil Graf, 1779</code>). Leading seed numbers like <code>1.</code> are
+                    ignored, so you can paste straight from a standings page.
+                </p>
+                <textarea id="paste-box" rows="8" spellcheck="false"
+                          placeholder="Nathan Zalewski, 1771&#10;Erik Thoren, 1671&#10;Neil Graf, 1779&#10;..."></textarea>
+                <div class="button-row">
+                    <button type="button" id="load-paste" class="primary">Load into roster</button>
+                    <button type="button" id="append-paste">Append to next empty seed</button>
+                    <button type="button" id="load-sample">Load sample roster</button>
+                    <button type="button" id="clear-roster" class="danger">Clear roster</button>
+                </div>
+                <p id="paste-status" class="status" role="status"></p>
+            </div>
+
+            <div class="panel">
+                <div class="panel-head">
+                    <h2>3. Review seeds &amp; ratings</h2>
+                    <div class="button-row compact">
+                        <button type="button" id="sort-by-rating">Re-seed by rating</button>
+                        <button type="button" id="copy-roster">Copy roster</button>
+                    </div>
+                </div>
+                <p class="hint">
+                    Seed order is bracket order &mdash; seed 1 is the top seed. Blank ratings default
+                    to <span id="default-rating-note">1500</span>.
+                </p>
+                <div id="roster-grid" class="roster-grid"></div>
+            </div>
+
+            <div class="panel">
+                <h2>4. Simulation options</h2>
+                <div class="options">
+                    <label>
+                        Match format
+                        <select id="best-of"></select>
+                    </label>
+                    <label>
+                        Simulations
+                        <input type="number" id="simulations" value="10000" min="1" step="1000">
+                    </label>
+                    <label>
+                        Random seed <span class="hint-inline">(optional, for repeatable runs)</span>
+                        <input type="number" id="rng-seed" placeholder="random" step="1">
+                    </label>
+                </div>
+                <div class="button-row">
+                    <button type="button" id="run-simulation" class="primary large">Run simulation</button>
+                </div>
+                <p id="run-status" class="status" role="status"></p>
+            </div>
+        </section>
+
+        <!-- ---------- Results view ---------- -->
+        <section id="results-view" hidden>
+            <div class="panel">
+                <div class="panel-head">
+                    <h2>Results</h2>
+                    <button type="button" id="back-to-setup">&larr; Edit roster</button>
+                </div>
+                <p id="results-summary" class="hint"></p>
+                <div class="chart-wrap"><canvas id="predictionChart"></canvas></div>
+            </div>
+
+            <div class="panel">
+                <h2>Advancement probabilities</h2>
+                <p class="hint">Chance each player reaches a given round. &ldquo;&mdash;&rdquo; means
+                   the player has a bye and never plays that round.</p>
+                <div class="table-wrap">
+                    <table id="results-table">
+                        <thead></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
 
     <footer>
         <p>&copy; 2025 IFPA Prediction Website</p>
