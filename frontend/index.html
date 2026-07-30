@@ -39,6 +39,22 @@
                     <button type="button" id="clear-roster" class="danger">Clear roster</button>
                 </div>
                 <p id="paste-status" class="status" role="status"></p>
+
+                <details class="importer">
+                    <summary>Or import from MatchPlay <span class="tag">unverified</span></summary>
+                    <p class="hint">
+                        Pulls a tournament's field and their IFPA ratings. Needs
+                        <code>MATCHPLAY_API_TOKEN</code> set in your own <code>.env</code> file
+                        &mdash; the server reads it directly, so don't paste a token in here.
+                        This path has never been run against the live API, so treat the first
+                        run as a test.
+                    </p>
+                    <div class="button-row">
+                        <input type="number" id="matchplay-id" placeholder="Tournament ID" step="1">
+                        <button type="button" id="matchplay-import">Import field</button>
+                    </div>
+                    <p id="matchplay-status" class="status" role="status"></p>
+                </details>
             </div>
 
             <div class="panel">
@@ -87,10 +103,38 @@
                     <button type="button" id="back-to-setup">&larr; Edit roster</button>
                 </div>
                 <p id="results-summary" class="hint"></p>
+
+                <div class="tabs" role="tablist">
+                    <button type="button" class="tab" data-tab="bracket" role="tab">Bracket</button>
+                    <button type="button" class="tab" data-tab="chart" role="tab">Win chart</button>
+                    <button type="button" class="tab" data-tab="table" role="tab">Advancement table</button>
+                </div>
+
+                <div id="scenario-bar" class="scenario-bar" hidden>
+                    <div id="scenario-list" class="scenario-list"></div>
+                    <button type="button" id="clear-scenario" class="danger">Clear all</button>
+                </div>
+            </div>
+
+            <!-- Bracket -->
+            <div class="panel" id="panel-bracket">
+                <p class="hint">
+                    Round 1 is fixed by seeding. Later slots show whoever lands there most often
+                    across the simulations, with the share of runs they occupy it. Click any match
+                    for head-to-head odds and to force a result.
+                </p>
+                <div class="bracket-scroll">
+                    <div id="bracket" class="bracket"></div>
+                </div>
+            </div>
+
+            <!-- Chart -->
+            <div class="panel" id="panel-chart" hidden>
                 <div class="chart-wrap"><canvas id="predictionChart"></canvas></div>
             </div>
 
-            <div class="panel">
+            <!-- Table -->
+            <div class="panel" id="panel-table" hidden>
                 <h2>Advancement probabilities</h2>
                 <p class="hint">Chance each player reaches a given round. &ldquo;&mdash;&rdquo; means
                    the player has a bye and never plays that round.</p>
@@ -102,6 +146,17 @@
                 </div>
             </div>
         </section>
+
+        <!-- Match detail, shown when a bracket match is clicked -->
+        <div id="match-dialog" class="dialog-backdrop" hidden>
+            <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="match-dialog-title">
+                <div class="dialog-head">
+                    <h3 id="match-dialog-title"></h3>
+                    <button type="button" id="match-dialog-close" aria-label="Close">&times;</button>
+                </div>
+                <div id="match-dialog-body"></div>
+            </div>
+        </div>
     </main>
 
     <footer>

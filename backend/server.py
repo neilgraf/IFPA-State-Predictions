@@ -21,9 +21,10 @@ if REPO_ROOT not in sys.path:
 from flask import Flask, jsonify, request, send_from_directory
 
 from backend.models.bracket_definitions import MAX_PLAYERS, SUPPORTED_SIZES, build_bracket
+from backend.models.match_odds import head_to_head
 from backend.models.player import Player
 from backend.models.players_data import DATASETS
-from backend.models.tournament import BracketTournament
+from backend.models.tournament import BracketTournament, ForcedScenarioTooRare
 
 FRONTEND_DIR = os.path.join(REPO_ROOT, "frontend")
 PREDICTIONS_PATH = os.path.join(REPO_ROOT, "backend", "data", "predictions.json")
@@ -38,7 +39,7 @@ app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="")
 
 
 class InvalidRoster(ValueError):
-    """Raised when a submitted roster can't be turned into a bracket."""
+    """Raised when a submitted roster or scenario can't be turned into a run."""
 
 
 @app.route("/")
@@ -73,6 +74,10 @@ def predictions():
     except json.JSONDecodeError:
         return jsonify({"error": "predictions.json is not valid JSON."}), 500
 
+
+# ---------------------------------------------------------------------
+# Request parsing
+# ---------------------------------------------------------------------
 
 def _parse_players(raw_players):
     """Turns the GUI's roster payload into {seed: Player}, seeded by list order."""
@@ -140,6 +145,55 @@ def _parse_options(payload):
     return simulations, best_of, rng_seed
 
 
+def _parse_forced(raw_forced, tournament):
+    """
+    Validates the 'what if' scenario: a list of
+    {"round": r, "match": m, "winner": seed}.
+
+    Every reference is checked against the real bracket, because a forced
+    result on a bye or on a player who can't reach that match would
+    otherwise be silently ignored -- the user would see an unchanged number
+    and have no idea their scenario did nothing.
+    """
+    if raw_forced in (None, ""):
+        return None
+    if not isinstance(raw_forced, list):
+        raise InvalidRoster("'forced' must be a list of {round, match, winner} objects.")
+
+    forced = {}
+    for entry in raw_forced:
+        if not isinstance(entry, dict):
+            raise InvalidRoster("Each forced result must be a {round, match, winner} object.")
+        try:
+            round_index = int(entry["round"])
+            match_index = int(entry["match"])
+            winner = int(entry["winner"])
+        except (KeyError, TypeError, ValueError):
+            raise InvalidRoster("Each forced result needs numeric 'round', 'match' and 'winner'.")
+
+        if not 0 <= round_index < len(tournament.round_labels):
+            raise InvalidRoster(f"Forced result: round {round_index} isn't in this bracket.")
+        if match_index not in tournament.playable_matches(round_index):
+            raise InvalidRoster(
+                f"Forced result: {tournament.round_labels[round_index]} match "
+                f"{match_index} isn't a contested match (it may be a bye)."
+            )
+        if winner not in tournament.players:
+            raise InvalidRoster(f"Forced result: seed {winner} isn't in this field.")
+        if (round_index, match_index) in forced:
+            raise InvalidRoster(
+                f"Two different winners were forced for the same match "
+                f"({tournament.round_labels[round_index]} match {match_index})."
+            )
+        forced[(round_index, match_index)] = winner
+
+    return forced
+
+
+# ---------------------------------------------------------------------
+# Simulation
+# ---------------------------------------------------------------------
+
 @app.route("/api/simulate", methods=["POST"])
 def simulate():
     """
@@ -150,7 +204,9 @@ def simulate():
           "players": [{"name": "...", "rating": 1700}, ...],  # in seed order
           "simulations": 10000,
           "best_of": 7,
-          "seed": null
+          "seed": null,
+          "forced": [{"round": 2, "match": 0, "winner": 1}],
+          "bracket": true
         }
     """
     payload = request.get_json(silent=True)
@@ -161,15 +217,24 @@ def simulate():
         players = _parse_players(payload.get("players"))
         simulations, best_of, rng_seed = _parse_options(payload)
         slots = build_bracket(len(players))
-    except InvalidRoster as exc:
-        return jsonify({"error": str(exc)}), 400
-    except ValueError as exc:
+        tournament = BracketTournament(players, slots, best_of=best_of)
+        forced = _parse_forced(payload.get("forced"), tournament)
+    except (InvalidRoster, ValueError) as exc:
         return jsonify({"error": str(exc)}), 400
 
-    tournament = BracketTournament(players, slots, best_of=best_of)
-    results = tournament.run(num_simulations=simulations, seed=rng_seed)
+    want_bracket = payload.get("bracket", True) is not False
 
-    return jsonify({
+    try:
+        outcome = tournament.run(
+            num_simulations=simulations,
+            seed=rng_seed,
+            forced=forced,
+            track_bracket=want_bracket,
+        )
+    except ForcedScenarioTooRare as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    response = {
         "players": len(players),
         "bracket_size": len(slots),
         "byes": sum(1 for slot in slots if slot is None),
@@ -177,7 +242,162 @@ def simulate():
         "best_of": best_of,
         "simulations": simulations,
         "seed": rng_seed,
-        "results": results,
+        "results": outcome.results,
+        "meta": outcome.meta,
+        "forced": [
+            {"round": r, "match": m, "winner": w}
+            for (r, m), w in (forced or {}).items()
+        ],
+    }
+    if want_bracket:
+        response["bracket"] = tournament.bracket_view(
+            outcome.occupancy, outcome.meta["kept"]
+        )
+    return jsonify(response)
+
+
+@app.route("/api/head-to-head")
+def head_to_head_odds():
+    """
+    Exact odds for one matchup: /api/head-to-head?a=1779&b=1671&best_of=7
+
+    Computed in closed form rather than simulated, so the number the UI
+    shows for a matchup doesn't wobble between page loads.
+    """
+    try:
+        rating_a = float(request.args["a"])
+        rating_b = float(request.args["b"])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "Provide numeric 'a' and 'b' ratings."}), 400
+
+    try:
+        best_of = int(request.args.get("best_of", 7))
+    except (TypeError, ValueError):
+        return jsonify({"error": "'best_of' must be a whole number."}), 400
+    if best_of not in ALLOWED_BEST_OF:
+        return jsonify({"error": f"'best_of' must be one of {ALLOWED_BEST_OF}."}), 400
+
+    odds = head_to_head(rating_a, rating_b, best_of)
+    odds["rating_a"] = rating_a
+    odds["rating_b"] = rating_b
+    return jsonify(odds)
+
+
+# ---------------------------------------------------------------------
+# MatchPlay import
+# ---------------------------------------------------------------------
+
+# The MatchPlay user payload nests IFPA data, and the exact key has not been
+# verified against the live API from this environment. Rather than guess one
+# path and fail opaquely, try the plausible ones and report what was found.
+IFPA_RATING_PATHS = (
+    ("ifpa", "rating"),
+    ("ifpa", "ratingValue"),
+    ("ifpa", "ratings", "rating"),
+    ("ifpaRating",),
+    ("rating",),
+)
+
+
+def _dig(data, path):
+    """Walks a nested dict along `path`, returning None if it doesn't exist."""
+    for key in path:
+        if not isinstance(data, dict) or key not in data:
+            return None
+        data = data[key]
+    return data
+
+
+def _extract_rating(user_payload):
+    for path in IFPA_RATING_PATHS:
+        value = _dig(user_payload, path)
+        if isinstance(value, (int, float)) and MIN_RATING < value <= MAX_RATING:
+            return float(value)
+    return None
+
+
+def _unwrap(payload):
+    """MatchPlay wraps some collections in {'data': [...]}, some not."""
+    if isinstance(payload, dict):
+        for key in ("data", "players", "results"):
+            if isinstance(payload.get(key), list):
+                return payload[key]
+        return []
+    return payload if isinstance(payload, list) else []
+
+
+@app.route("/api/matchplay/<int:tournament_id>")
+def matchplay_import(tournament_id):
+    """
+    Pulls a MatchPlay tournament's field and their IFPA ratings.
+
+    UNVERIFIED against the live API -- written from the documented shape but
+    never run with a real token from this machine. If the field names are
+    wrong, /api/matchplay/<id>?debug=1 returns the raw payloads so the paths
+    above can be corrected in one place.
+    """
+    try:
+        from backend.ingestion.matchplay_client import MatchPlayClient
+    except ImportError:
+        return jsonify({
+            "error": "The 'requests' package isn't installed. Run: pip install requests"
+        }), 500
+
+    try:
+        client = MatchPlayClient()
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    try:
+        raw_players = _unwrap(client.get_tournament_players(tournament_id))
+    except Exception as exc:
+        return jsonify({"error": f"MatchPlay request failed: {exc}"}), 502
+
+    if request.args.get("debug"):
+        return jsonify({"tournament_id": tournament_id, "raw_players": raw_players})
+
+    if not raw_players:
+        return jsonify({
+            "error": f"MatchPlay returned no players for tournament {tournament_id}. "
+                     "Add ?debug=1 to inspect the raw response."
+        }), 404
+
+    roster, unresolved = [], []
+    for entry in raw_players:
+        name = entry.get("name") or entry.get("playerName") or ""
+        rating = _extract_rating(entry)
+        user_id = entry.get("userId") or entry.get("user_id")
+
+        # The tournament-players payload may not embed IFPA data, in which
+        # case each player needs a follow-up lookup.
+        if rating is None and user_id:
+            try:
+                rating = _extract_rating(client.get_user(int(user_id)))
+            except Exception:
+                rating = None
+
+        if not name:
+            continue
+        if rating is None:
+            unresolved.append(name)
+        roster.append({
+            "name": name,
+            "rating": rating,
+            "seed": entry.get("seed") or entry.get("position"),
+        })
+
+    # Seed by MatchPlay's own seeding when present, otherwise by rating.
+    if all(p["seed"] is not None for p in roster):
+        roster.sort(key=lambda p: p["seed"])
+    else:
+        roster.sort(key=lambda p: (p["rating"] is None, -(p["rating"] or 0)))
+
+    return jsonify({
+        "tournament_id": tournament_id,
+        "players": [{"name": p["name"], "rating": p["rating"]} for p in roster],
+        "count": len(roster),
+        "unresolved_ratings": unresolved,
+        "verified": False,
     })
 
 

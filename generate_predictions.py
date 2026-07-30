@@ -33,7 +33,7 @@ def main():
 
     players = {p.seed: p for p in DATASETS[args.dataset]}
     tournament = BracketTournament(players, build_bracket(len(players)))
-    results = tournament.run(num_simulations=args.simulations, seed=args.seed)
+    results = tournament.run(num_simulations=args.simulations, seed=args.seed).results
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     with open(args.out, "w") as f:
