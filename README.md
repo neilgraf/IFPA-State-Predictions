@@ -25,9 +25,15 @@ Then open http://127.0.0.1:5000 and use the setup GUI:
    up. Blank ratings default to 1500.
 3. **Tweak the options** — match format (single game through best-of-9),
    simulation count, and an optional RNG seed for repeatable runs.
-4. **Run it.** You get a win-probability bar chart plus a round-by-round
-   advancement table (probability of reaching each round, `—` where a bye
-   means the player never plays that round).
+4. **Run it.** Results come back on three tabs:
+   - **Bracket** — the full bracket. Round 1 is fixed by seeding; later
+     slots show whoever lands there most often across the simulations,
+     with the share of runs they occupy it. Click any match for exact
+     head-to-head odds, or pin a winner to re-run everything conditional
+     on that result.
+   - **Win chart** — win probability for the whole field.
+   - **Advancement table** — probability of reaching each round, with `—`
+     where a bye means the player never plays that round.
 
 "Load sample roster" fills in one of the rosters from
 `backend/models/players_data.py` if you just want to see it work.
@@ -112,13 +118,34 @@ order.
 Responds with the field/bracket shape, the round labels in playing order,
 and a `results` list sorted by win probability, each entry carrying `seed`,
 `rating`, `win_probability`, and `round_probabilities` (`null` for a round
-a bye means the player never plays).
+a bye means the player never plays). When `bracket` is not `false` it also
+returns a `bracket` object: rounds → matches → the two slots of each match,
+each holding its likeliest occupants.
+
+Add `forced` to ask a conditional question:
+
+```json
+"forced": [{"round": 2, "match": 0, "winner": 1}]
+```
+
+Simulations where seed 1 never reaches that match are **discarded**, so the
+answer is a true conditional distribution rather than a fudge. `meta`
+reports how many runs survived — check `acceptance_rate` before trusting a
+heavily constrained scenario.
+
+`GET /api/head-to-head?a=1779&b=1671&best_of=7` — exact odds for one
+matchup, computed in closed form rather than simulated.
 
 `GET /api/config` — field sizes, match formats, limits, and the built-in
 sample rosters the GUI offers.
 
 `GET /api/predictions` — the last roster written by
 `generate_predictions.py`.
+
+`GET /api/matchplay/<tournament_id>` — **unverified.** Pulls a MatchPlay
+field and their IFPA ratings. Needs `MATCHPLAY_API_TOKEN` in `.env`. Written
+from the documented API shape but never run against the live service; add
+`?debug=1` to dump the raw payload if the field names turn out to be wrong.
 
 ## What changed from the original prototype
 

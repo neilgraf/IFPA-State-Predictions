@@ -10,6 +10,10 @@ const state = {
     playerCount: 24,
     players: [],      // [{ name, rating }] length === playerCount
     chart: null,
+    payload: null,    // last /api/simulate response
+    forced: [],       // [{ round, match, winner }] the "what if" scenario
+    tab: 'bracket',
+    chartStale: true, // Chart.js can't size a canvas inside a hidden panel
 };
 
 const el = (id) => document.getElementById(id);
@@ -255,6 +259,47 @@ function clearRoster() {
     setStatus('paste-status', 'Roster cleared.', 'ok');
 }
 
+async function importFromMatchPlay() {
+    const id = el('matchplay-id').value.trim();
+    if (!id) {
+        setStatus('matchplay-status', 'Enter a MatchPlay tournament ID first.', 'error');
+        return;
+    }
+
+    const button = el('matchplay-import');
+    button.disabled = true;
+    setStatus('matchplay-status', 'Fetching from MatchPlay…', null);
+
+    try {
+        const response = await fetch(`/api/matchplay/${encodeURIComponent(id)}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || `Server returned ${response.status}.`);
+        if (!data.players.length) throw new Error('That tournament returned no players.');
+
+        const capacity = growToFit(data.players.length);
+        state.players = Array.from({ length: capacity }, blankPlayer);
+        data.players.slice(0, capacity).forEach((player, index) => {
+            state.players[index] = { name: player.name, rating: player.rating };
+        });
+
+        renderBracketSummary();
+        renderRoster();
+
+        let message = `Imported ${Math.min(data.players.length, capacity)} players.`;
+        if (data.unresolved_ratings.length) {
+            message += ` No IFPA rating found for ${data.unresolved_ratings.length}` +
+                       ` (${data.unresolved_ratings.slice(0, 3).join(', ')}` +
+                       `${data.unresolved_ratings.length > 3 ? '…' : ''}) — they'll default to ` +
+                       `${state.config.default_rating}, so check them before running.`;
+        }
+        setStatus('matchplay-status', message, data.unresolved_ratings.length ? 'error' : 'ok');
+    } catch (error) {
+        setStatus('matchplay-status', error.message || 'Import failed.', 'error');
+    } finally {
+        button.disabled = false;
+    }
+}
+
 /* ------------------------------------------------------------------ */
 /* Running the simulation                                              */
 /* ------------------------------------------------------------------ */
@@ -276,6 +321,25 @@ function flagMissing(seeds) {
     if (seeds.length) rows[seeds[0] - 1].scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
+/** Posts the current roster + scenario. `statusId` is where errors surface. */
+async function requestSimulation(statusId) {
+    const response = await fetch('/api/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            players: state.players.map((p) => ({ name: p.name.trim(), rating: p.rating })),
+            simulations: Number(el('simulations').value),
+            best_of: Number(el('best-of').value),
+            seed: el('rng-seed').value === '' ? null : Number(el('rng-seed').value),
+            forced: state.forced,
+        }),
+    });
+
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || `Server returned ${response.status}.`);
+    return payload;
+}
+
 async function runSimulation() {
     const missing = collectMissingSeeds();
     if (missing.length) {
@@ -294,26 +358,28 @@ async function runSimulation() {
     setStatus('run-status', 'Simulating…', null);
 
     try {
-        const response = await fetch('/api/simulate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                players: state.players.map((p) => ({ name: p.name.trim(), rating: p.rating })),
-                simulations: Number(el('simulations').value),
-                best_of: Number(el('best-of').value),
-                seed: el('rng-seed').value === '' ? null : Number(el('rng-seed').value),
-            }),
-        });
-
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.error || `Server returned ${response.status}.`);
-
-        showResults(payload);
+        showResults(await requestSimulation());
         setStatus('run-status', '', null);
     } catch (error) {
         setStatus('run-status', error.message || 'The simulation failed.', 'error');
     } finally {
         button.disabled = false;
+    }
+}
+
+/**
+ * Re-runs after the scenario changed. On failure the scenario is rolled back,
+ * because an over-constrained "what if" is rejected by the server and we'd
+ * otherwise be left showing results that don't match the chips on screen.
+ */
+async function resimulate(previousForced) {
+    try {
+        showResults(await requestSimulation());
+    } catch (error) {
+        state.forced = previousForced;
+        renderScenarioBar();
+        if (state.payload) renderBracket(state.payload);
+        window.alert(error.message || 'That scenario could not be simulated.');
     }
 }
 
@@ -327,6 +393,7 @@ const ROUND_NAMES = { QF: 'Quarterfinal', SF: 'Semifinal', F: 'Final', W: 'Win' 
 const roundHeading = (label) => ROUND_NAMES[label] || `Round ${label.slice(1)}`;
 
 function showResults(payload) {
+    state.payload = payload;
     el('setup-view').hidden = true;
     el('results-view').hidden = false;
     window.scrollTo({ top: 0 });
@@ -334,14 +401,367 @@ function showResults(payload) {
     const byeNote = payload.byes
         ? `, ${payload.byes} bye${payload.byes === 1 ? '' : 's'}`
         : '';
-    el('results-summary').textContent =
+    let summary =
         `${payload.players} players in a ${payload.bracket_size}-slot bracket${byeNote} · ` +
         `best-of-${payload.best_of} matches · ` +
         `${payload.simulations.toLocaleString()} simulations` +
         (payload.seed === null ? '' : ` · seed ${payload.seed}`);
 
-    renderChart(payload.results);
+    // With a forced scenario the server throws away runs that contradict it,
+    // so say how many survived -- a low acceptance rate means the remaining
+    // numbers rest on a much smaller sample than requested.
+    const meta = payload.meta;
+    if (meta && meta.attempts > meta.kept) {
+        summary += ` · conditional: kept ${meta.kept.toLocaleString()} of ` +
+                   `${meta.attempts.toLocaleString()} runs ` +
+                   `(${(meta.acceptance_rate * 100).toFixed(1)}% matched the scenario)`;
+        if (meta.truncated) summary += ' — sample truncated, treat as rough';
+    }
+    el('results-summary').textContent = summary;
+
+    renderScenarioBar();
+    renderBracket(payload);
     renderTable(payload);
+    state.chartStale = true;
+    showTab(state.tab);
+}
+
+/* ---------- Tabs ---------- */
+
+function showTab(name) {
+    state.tab = name;
+    for (const tab of document.querySelectorAll('.tab')) {
+        tab.setAttribute('aria-selected', String(tab.dataset.tab === name));
+    }
+    for (const key of ['bracket', 'chart', 'table']) {
+        el(`panel-${key}`).hidden = key !== name;
+    }
+    // Chart.js sizes its canvas from the container at construction time. Built
+    // inside a hidden panel it measures 0x0 and locks the canvas to 0px, which
+    // a later resize() can't undo -- so build it only once the panel is shown.
+    if (name === 'chart' && state.chartStale && state.payload) {
+        renderChart(state.payload.results);
+        state.chartStale = false;
+    }
+}
+
+/* ---------- Scenario ("what if") ---------- */
+
+function forcedFor(roundIndex, matchIndex) {
+    return state.forced.find((f) => f.round === roundIndex && f.match === matchIndex) || null;
+}
+
+function setForced(roundIndex, matchIndex, winnerSeed) {
+    const previous = state.forced;
+    state.forced = state.forced
+        .filter((f) => !(f.round === roundIndex && f.match === matchIndex))
+        .concat(winnerSeed === null ? [] : [{ round: roundIndex, match: matchIndex, winner: winnerSeed }]);
+    resimulate(previous);
+}
+
+function renderScenarioBar() {
+    const bar = el('scenario-bar');
+    const list = el('scenario-list');
+    bar.hidden = state.forced.length === 0;
+    list.innerHTML = '';
+
+    const nameOf = (seed) => {
+        const row = (state.payload?.results || []).find((r) => r.seed === seed);
+        return row ? row.name : `Seed ${seed}`;
+    };
+
+    for (const forced of state.forced) {
+        const label = state.payload?.rounds?.[forced.round] ?? `R${forced.round + 1}`;
+        const chip = document.createElement('span');
+        chip.className = 'scenario-chip';
+        chip.append(`${nameOf(forced.winner)} wins ${roundHeading(label)}`);
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.textContent = '×';
+        remove.title = 'Remove this condition';
+        remove.addEventListener('click', () => setForced(forced.round, forced.match, null));
+        chip.append(remove);
+        list.append(chip);
+    }
+}
+
+/* ---------- Bracket ---------- */
+
+const BRACKET = {
+    matchWidth: 190,
+    slotHeight: 25,
+    gutter: 46,
+    unit: 70,        // vertical pitch between round-1 matches
+    titleHeight: 30,
+};
+
+const matchHeight = () => BRACKET.slotHeight * 2 + 1;
+
+function renderBracket(payload) {
+    const host = el('bracket');
+    host.innerHTML = '';
+    const bracket = payload.bracket;
+    if (!bracket) return;
+
+    const rounds = bracket.rounds.filter((round) => round.matches.length);
+    if (!rounds.length) return;
+
+    // Round 1 sets the vertical scale; every later round centres its matches
+    // between the two it feeds from, which falls out of spacing each round's
+    // matches evenly across the same total height.
+    const baseCount = rounds[0].matches.length;
+    const height = baseCount * BRACKET.unit;
+    const columnPitch = BRACKET.matchWidth + BRACKET.gutter;
+
+    host.style.height = `${height + BRACKET.titleHeight}px`;
+    host.style.width = `${rounds.length * columnPitch + 150}px`;
+
+    const centreY = (roundPos, matchPos) =>
+        BRACKET.titleHeight + (height * (matchPos + 0.5)) / rounds[roundPos].matches.length;
+    const columnX = (roundPos) => roundPos * columnPitch;
+
+    // A match's true bracket index tells us where it feeds: bracket index m
+    // always feeds index floor(m / 2) of the next round. Byes are filtered
+    // out of `matches`, so map true indices back to array positions.
+    const positionOf = rounds.map(
+        (round) => new Map(round.matches.map((match, position) => [match.index, position]))
+    );
+
+    rounds.forEach((round, roundPos) => {
+        const title = document.createElement('div');
+        title.className = 'bracket-round-title';
+        title.textContent = roundHeading(round.label);
+        title.style.left = `${columnX(roundPos)}px`;
+        title.style.width = `${BRACKET.matchWidth}px`;
+        host.append(title);
+
+        round.matches.forEach((match, matchPos) => {
+            const y = centreY(roundPos, matchPos);
+            host.append(buildMatch(round, match, columnX(roundPos), y));
+
+            // Connector into the next round.
+            const nextRound = rounds[roundPos + 1];
+            const targetPos = nextRound
+                ? positionOf[roundPos + 1].get(Math.floor(match.index / 2))
+                : undefined;
+            const targetY = nextRound && targetPos !== undefined
+                ? centreY(roundPos + 1, targetPos)
+                : (roundPos === rounds.length - 1 ? centreY(roundPos, matchPos) : null);
+
+            if (targetY !== null && targetY !== undefined) {
+                drawConnector(host, columnX(roundPos) + BRACKET.matchWidth, y, columnX(roundPos + 1), targetY);
+            }
+        });
+    });
+
+    // Champion box, hanging off the right of the final.
+    const champion = bracket.champion[0];
+    if (champion) {
+        const box = document.createElement('div');
+        box.className = 'bracket-champion';
+        box.style.left = `${columnX(rounds.length)}px`;
+        box.append(`🏆 ${champion.name}`);
+        const prob = document.createElement('span');
+        prob.className = 'bslot-prob';
+        prob.textContent = percent(champion.probability);
+        box.append(prob);
+        host.append(box);
+        // Centre on the final once it has a measured height.
+        box.style.top = `${centreY(rounds.length - 1, 0) - box.offsetHeight / 2}px`;
+    }
+}
+
+/** Horizontal stub, vertical riser, then horizontal run into the target. */
+function drawConnector(host, fromX, fromY, toX, toY) {
+    const midX = fromX + BRACKET.gutter / 2;
+    const line = (left, top, width, height) => {
+        const div = document.createElement('div');
+        div.className = 'bracket-line';
+        div.style.cssText =
+            `left:${left}px;top:${top}px;width:${Math.max(width, 1)}px;height:${Math.max(height, 1)}px`;
+        host.append(div);
+    };
+
+    line(fromX, fromY, BRACKET.gutter / 2, 1);
+    if (Math.abs(toY - fromY) > 0.5) {
+        line(midX, Math.min(fromY, toY), 1, Math.abs(toY - fromY));
+    }
+    line(midX, toY, toX - midX, 1);
+}
+
+function buildMatch(round, match, x, centreY) {
+    const box = document.createElement('div');
+    box.className = 'bracket-match';
+    box.style.left = `${x}px`;
+    box.style.top = `${centreY - matchHeight() / 2}px`;
+    box.style.width = `${BRACKET.matchWidth}px`;
+
+    const forced = forcedFor(round.index, match.index);
+    if (forced) box.classList.add('has-forced');
+
+    match.slots.forEach((candidates) => {
+        box.append(buildSlot(candidates, forced));
+    });
+
+    box.addEventListener('click', () => openMatchDialog(round, match));
+    return box;
+}
+
+function buildSlot(candidates, forced) {
+    const slot = document.createElement('div');
+    slot.className = 'bracket-slot';
+    slot.style.height = `${BRACKET.slotHeight}px`;
+
+    const top = candidates[0];
+    const seed = document.createElement('span');
+    seed.className = 'bslot-seed';
+    const name = document.createElement('span');
+    name.className = 'bslot-name';
+    const prob = document.createElement('span');
+    prob.className = 'bslot-prob';
+
+    if (!top) {
+        slot.classList.add('empty');
+        seed.textContent = '–';
+        name.textContent = 'TBD';
+        prob.textContent = '';
+    } else {
+        seed.textContent = top.seed;
+        name.textContent = top.name;
+        prob.textContent = percent(top.probability);
+        if (top.probability > 0.9999) slot.classList.add('certain');
+        else if (top.probability >= 0.5) slot.classList.add('favourite');
+        if (forced && forced.winner === top.seed) slot.classList.add('forced');
+    }
+
+    slot.append(seed, name, prob);
+    return slot;
+}
+
+/* ---------- Match dialog ---------- */
+
+async function openMatchDialog(round, match) {
+    const dialog = el('match-dialog');
+    const body = el('match-dialog-body');
+    const [slotA, slotB] = match.slots;
+    const topA = slotA[0];
+    const topB = slotB[0];
+
+    el('match-dialog-title').textContent = `${roundHeading(round.label)} — match ${match.index + 1}`;
+    body.innerHTML = '';
+    dialog.hidden = false;
+
+    if (!topA || !topB) {
+        body.append(Object.assign(document.createElement('p'), {
+            className: 'hint',
+            textContent: 'This match has no likely participants yet.',
+        }));
+        return;
+    }
+
+    // Head-to-head odds between the two likeliest occupants.
+    const odds = document.createElement('div');
+    odds.innerHTML = '<h4>If they meet</h4><p class="hint">Loading odds…</p>';
+    body.append(odds);
+
+    try {
+        const response = await fetch(
+            `/api/head-to-head?a=${topA.rating}&b=${topB.rating}&best_of=${state.payload.best_of}`
+        );
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+
+        const matchPct = data.match_probability;
+        odds.innerHTML = '<h4>If they meet</h4>';
+
+        const bar = document.createElement('div');
+        bar.className = 'odds-bar';
+        const sideA = document.createElement('span');
+        sideA.className = 'side-a';
+        sideA.style.width = `${matchPct * 100}%`;
+        sideA.textContent = `${(matchPct * 100).toFixed(1)}%`;
+        const sideB = document.createElement('span');
+        sideB.className = 'side-b';
+        sideB.style.width = `${(1 - matchPct) * 100}%`;
+        sideB.textContent = `${((1 - matchPct) * 100).toFixed(1)}%`;
+        bar.append(sideA, sideB);
+        odds.append(bar);
+
+        const caption = document.createElement('p');
+        caption.className = 'hint';
+        caption.textContent =
+            `${topA.name} (${topA.rating}) vs ${topB.name} (${topB.rating}) · ` +
+            `${(data.game_probability * 100).toFixed(1)}% per game, ` +
+            `${(matchPct * 100).toFixed(1)}% over a best-of-${data.best_of}. ` +
+            `Longer matches favour the stronger player.`;
+        odds.append(caption);
+    } catch (error) {
+        odds.innerHTML = `<h4>If they meet</h4><p class="status error">${error.message || 'Odds unavailable.'}</p>`;
+    }
+
+    // Who might actually be standing here.
+    for (const [label, candidates] of [['Top slot', slotA], ['Bottom slot', slotB]]) {
+        if (candidates.length <= 1 && candidates[0]?.probability > 0.9999) continue;
+        const heading = document.createElement('h4');
+        heading.textContent = `${label} — who gets here`;
+        const list = document.createElement('ul');
+        list.className = 'candidate-list';
+        for (const candidate of candidates) {
+            const item = document.createElement('li');
+            item.append(`${candidate.seed}. ${candidate.name}`, Object.assign(
+                document.createElement('span'), { textContent: percent(candidate.probability) }
+            ));
+            list.append(item);
+        }
+        body.append(heading, list);
+    }
+
+    // Force a result.
+    const forced = forcedFor(round.index, match.index);
+    const heading = document.createElement('h4');
+    heading.textContent = 'What if…';
+    body.append(heading);
+
+    const note = document.createElement('p');
+    note.className = 'hint';
+    note.textContent = forced
+        ? 'This match is currently forced. Everything else re-simulates around it.'
+        : 'Pin a winner and every other number re-simulates conditional on it. Runs where that player never reaches this match are discarded.';
+    body.append(note);
+
+    const row = document.createElement('div');
+    row.className = 'button-row';
+    for (const candidate of [topA, topB]) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = `${candidate.name} wins`;
+        if (forced && forced.winner === candidate.seed) {
+            button.classList.add('primary');
+            button.textContent += ' ✓';
+        }
+        button.addEventListener('click', () => {
+            closeMatchDialog();
+            setForced(round.index, match.index, candidate.seed);
+        });
+        row.append(button);
+    }
+    if (forced) {
+        const clear = document.createElement('button');
+        clear.type = 'button';
+        clear.className = 'danger';
+        clear.textContent = 'Remove condition';
+        clear.addEventListener('click', () => {
+            closeMatchDialog();
+            setForced(round.index, match.index, null);
+        });
+        row.append(clear);
+    }
+    body.append(row);
+}
+
+function closeMatchDialog() {
+    el('match-dialog').hidden = true;
 }
 
 function renderChart(results) {
@@ -468,10 +888,27 @@ async function init() {
     el('sort-by-rating').addEventListener('click', sortByRating);
     el('copy-roster').addEventListener('click', copyRoster);
     el('run-simulation').addEventListener('click', runSimulation);
+    el('matchplay-import').addEventListener('click', importFromMatchPlay);
     el('back-to-setup').addEventListener('click', () => {
         el('results-view').hidden = true;
         el('setup-view').hidden = false;
         window.scrollTo({ top: 0 });
+    });
+
+    for (const tab of document.querySelectorAll('.tab')) {
+        tab.addEventListener('click', () => showTab(tab.dataset.tab));
+    }
+    el('clear-scenario').addEventListener('click', () => {
+        const previous = state.forced;
+        state.forced = [];
+        resimulate(previous);
+    });
+    el('match-dialog-close').addEventListener('click', closeMatchDialog);
+    el('match-dialog').addEventListener('click', (event) => {
+        if (event.target === el('match-dialog')) closeMatchDialog();
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeMatchDialog();
     });
 }
 
